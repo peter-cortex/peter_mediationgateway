@@ -1,0 +1,4 @@
+transformers:
+  - name: mgw_svc_peter
+    options:
+      language: "it"

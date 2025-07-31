@@ -1,0 +1,16 @@
+[tool.poetry]
+name = "webrtc-service-transformers-stt-linto"
+version = "0.1.0"
+description = ""
+authors = ["Vincent Bailleau <vincent.bailleau@al-enterprise.com>"]
+readme = "README.md"
+packages = [{ include = "mgw_svc_stt_linto", from = "src" }]
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+webrtc-service-transformers-core = { path = "../webrtc_service_transformers_core" }
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

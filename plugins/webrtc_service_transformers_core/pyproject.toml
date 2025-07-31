@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "webrtc-service-transformers-core"
+version = "0.1.0"
+description = ""
+authors = ["Vincent Bailleau <vincent.bailleau@al-enterprise.com>"]
+readme = "README.md"
+packages = [{include = "mgw_svc_core", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.10"
+openwakeword = "^0.6.0"
+numpy = "^1.26.4"
+pydub = "^0.25.1"
+webrtcvad-wheels = "2.0.14"
+aiortc = "^1.9.0"
+huggingface-hub = "^0.26.3"
+requests = "^2.32.3"
+charset-normalizer = "^3.4.0"
+pyyaml = "^6.0.2"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

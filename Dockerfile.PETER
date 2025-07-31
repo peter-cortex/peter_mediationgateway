@@ -1,0 +1,131 @@
+ARG UBUNTU_VERSION=22.04
+ARG NVIDIA_CUDA_VERSION=12.3.2
+ARG CUDA_ARCHITECTURES=native
+
+FROM nvidia/cuda:${NVIDIA_CUDA_VERSION}-cudnn9-runtime-ubuntu${UBUNTU_VERSION}
+
+ARG CUDA_ARCHITECTURES
+ENV CUDA_ARCHITECTURES=${CUDA_ARCHITECTURES}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONFAULTHANDLER=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONHASHSEED=random \
+    PIP_NO_CACHE_DIR=off \
+    PIP_DISABLE_PIP_VERSION_CHECK=on \
+    PIP_DEFAULT_TIMEOUT=100 \
+    POETRY_NO_INTERACTION=1 \
+    POETRY_VIRTUALENVS_CREATE=false \
+    POETRY_CACHE_DIR='/var/cache/pypoetry' \
+    POETRY_HOME='/usr/local' \
+    POETRY_VERSION=1.8.4 \
+    PATH="/usr/local/bin:$PATH"
+
+#RUN apt-get update && apt-get install -y --no-install-recommends \
+#      python3.11 python3.11-dev python3.11-distutils python3.11-venv \
+#      git curl ffmpeg gnupg ca-certificates lsb-release \
+#    && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y software-properties-common && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends \
+      python3.11 python3.11-dev python3.11-distutils python3.11-venv \
+      git curl ffmpeg gnupg ca-certificates lsb-release && \
+    update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 1 && \
+    rm -rf /var/lib/apt/lists/*
+
+
+
+#python3 and python as 3.11, install pip
+RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2 \
+ && update-alternatives --install /usr/bin/python python /usr/bin/python3 1 \
+ && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.11 \
+ && pip install --upgrade pip
+
+#Poetry
+RUN curl -sSL https://install.python-poetry.org | python3.11 -
+
+WORKDIR /app
+
+#PETER dependencies 
+COPY requirements.peter.txt /app/
+
+RUN pip install --no-cache-dir --ignore-installed \
+    --index-url https://pypi.org/simple \
+    --extra-index-url https://download.pytorch.org/whl/cu121 \
+    -r requirements.peter.txt
+
+#Predownload of the model
+COPY download_models_peter.py /app/download_models_peter.py
+RUN python /app/download_models_peter.py
+
+# Install cuDNN8 for CUDA 12.3
+RUN apt-get update && apt-get install -y wget gnupg lsb-release && \
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-ubuntu2204.pin -O /etc/apt/preferences.d/cuda-repository-pin-600 && \
+    curl -fsSL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/3bf863cc.pub | \
+        gpg --dearmor --batch --yes -o /usr/share/keyrings/cuda-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/cuda-archive-keyring.gpg] https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/ /" \
+        > /etc/apt/sources.list.d/cuda.list && \
+    apt-get update && \
+    apt-get install -y libcudnn8 libcudnn8-dev && \
+    rm -f /usr/lib/x86_64-linux-gnu/libcudnn.so && \
+    rm -rf /var/lib/apt/lists/*
+
+#RUN apt-get update && \
+#    apt-get install -y --no-install-recommends \
+#    build-essential \
+#    cuda-toolkit-12-3 \
+#    cuda-nvcc-12-3 \
+#    cuda-command-line-tools-12-3 \
+#    && rm -rf /var/lib/apt/lists/*
+
+
+# Copy TOML files only to cache builds
+COPY mediation_gateway_service/pyproject.toml /app/mediation_gateway_service/
+COPY plugins/webrtc_service_transformers_peter /app/plugins/webrtc_service_transformers_peter
+COPY speakers/ /app/speakers/
+
+# Copy base plugin dependencies (non-cache invalidanti)
+COPY plugins/webrtc_service_transformers_core /app/plugins/webrtc_service_transformers_core
+#COPY plugins/webrtc_service_transformers_stt_linto /app/plugins/webrtc_service_transformers_stt_linto
+#COPY plugins/webrtc_service_transformers_stt_whisper /app/plugins/webrtc_service_transformers_stt_whisper
+#COPY plugins/webrtc_service_transformers_stt_whisper_live /app/plugins/webrtc_service_transformers_stt_whisper_live
+#COPY plugins/webrtc_service_transformers_cova /app/plugins/webrtc_service_transformers_cova
+#COPY plugins/webrtc_service_transformers_stst /app/plugins/webrtc_service_transformers_stst
+
+# Install COVA
+#WORKDIR /app/plugins/webrtc_service_transformers_cova
+#RUN poetry install --no-ansi --only=main
+#RUN pip install .
+#RUN poetry run python src/mgw_svc_cova/download_model.py
+
+# Install gateway service deps
+WORKDIR /app/mediation_gateway_service
+RUN poetry install --no-ansi --no-dev
+RUN poetry install --no-ansi --only main --no-root --no-cache && rm -rf ${POETRY_CACHE_DIR}
+
+# Install STST
+#RUN cd /app/plugins/webrtc_service_transformers_stst && pip install .
+
+# PETER install
+WORKDIR /app/plugins/webrtc_service_transformers_peter
+RUN pip install .
+COPY plugins/webrtc_service_transformers_peter /app/plugins/webrtc_service_transformers_peter
+
+#Some prev .toml was overwiting these libraries
+#RUN apt-get update && apt-get install -y build-essential ninja-build
+RUN pip install --no-cache-dir "huggingface-hub>=0.30.0,<1.0" "openai" 
+#RUN pip install deepspeed
+# Gateway logic
+COPY mediation_gateway_service /app/mediation_gateway_service
+
+# Config
+RUN mkdir /app/config && touch /app/config/config.yaml
+#COPY aiortc.patch /app/
+
+
+ENV PYTHONPATH="/app"
+
+EXPOSE ${PORT}
+
+CMD ["sh", "-c", "poetry run python3 /app/mediation_gateway_service/src/webrtc_service/server.py --port $PORT $VERBOSE --config /app/config/config.yaml"]

@@ -1,0 +1,195 @@
+{
+  "type": "object",
+  "properties": {
+      "server": {
+          "type": "object",
+          "properties": {
+              "type": {
+                  "const": "dict"
+              },
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "iceserver": {
+                          "type": "object",
+                          "properties": {
+                              "type": {
+                                  "const": "dict"
+                              },
+                              "schema": {
+                                  "type": "object",
+                                  "properties": {
+                                      "url": {
+                                          "type": "object",
+                                          "properties": {
+                                              "type": {
+                                                  "const": "list"
+                                              },
+                                              "schema": {
+                                                  "type": "array",
+                                                  "items": {
+                                                      "type": "object",
+                                                      "properties": {
+                                                          "type": {
+                                                              "const": "str"
+                                                          }
+                                                      },
+                                                      "required": [
+                                                          "type"
+                                                      ],
+                                                      "additionalProperties": false
+                                                  }
+                                              }
+                                          },
+                                          "required": [
+                                              "type",
+                                              "schema"
+                                          ],
+                                          "additionalProperties": false
+                                      },
+                                      "username": {
+                                          "type": "object",
+                                          "properties": {
+                                              "type": {
+                                                  "const": "str"
+                                              }
+                                          },
+                                          "required": [
+                                              "type"
+                                          ],
+                                          "additionalProperties": false
+                                      },
+                                      "credential": {
+                                          "type": "object",
+                                          "properties": {
+                                              "type": {
+                                                  "const": "str"
+                                              }
+                                          },
+                                          "required": [
+                                              "type"
+                                          ],
+                                          "additionalProperties": false
+                                      }
+                                  },
+                                  "required": [
+                                      "url",
+                                      "username",
+                                      "credential"
+                                  ],
+                                  "additionalProperties": false
+                              }
+                          },
+                          "required": [
+                              "type",
+                              "schema"
+                          ],
+                          "additionalProperties": false
+                      }
+                  },
+                  "required": [
+                      "iceserver"
+                  ],
+                  "additionalProperties": false
+              },
+              "required": {
+                  "const": false
+              }
+          },
+          "required": [
+              "type",
+              "schema",
+              "required"
+          ],
+          "additionalProperties": false
+      },
+      "transformers": {
+          "type": "object",
+          "properties": {
+              "type": {
+                  "const": "list"
+              },
+              "schema": {
+                  "type": "array",
+                  "items": {
+                      "type": "object",
+                      "properties": {
+                          "type": {
+                              "const": "dict"
+                          },
+                          "schema": {
+                              "type": "object",
+                              "properties": {
+                                  "name": {
+                                      "type": "object",
+                                      "properties": {
+                                          "type": {
+                                              "const": "str"
+                                          }
+                                      },
+                                      "required": [
+                                          "type"
+                                      ],
+                                      "additionalProperties": false
+                                  },
+                                  "options": {
+                                      "type": "object",
+                                      "properties": {
+                                          "type": {
+                                              "const": "dict"
+                                          },
+                                          "schema": {
+                                              "type": "object",
+                                              "properties": {
+                                                  "*": {
+                                                      "const": "object"
+                                                  }
+                                              },
+                                              "required": [
+                                                  "*"
+                                              ],
+                                              "additionalProperties": false
+                                          }
+                                      },
+                                      "required": [
+                                          "type",
+                                          "schema"
+                                      ],
+                                      "default": {},
+                                      "additionalProperties": false
+                                  },
+                                  "required": {
+                                      "const": false
+                                  }
+                              },
+                              "required": [
+                                  "name",
+                                  "options",
+                                  "required"
+                              ],
+                              "additionalProperties": false
+                          }
+                      },
+                      "required": [
+                          "type",
+                          "schema"
+                      ],
+                      "additionalProperties": false
+                  }
+              },
+              "required": {
+                  "const": false
+              }
+          },
+          "required": [
+              "type",
+              "schema",
+              "required"
+          ],
+          "additionalProperties": false
+      }
+  },
+  "additionalProperties": false,
+  "$id": "https://openrainbow.com",
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

@@ -1,0 +1,23 @@
+transformers:
+  - name: mgw_svc_cova
+    options:
+      test: 1
+
+  - name: mgw_svc_stt_linto
+    options:
+      test: 1
+  - name: mgw_svc_stt_whisper
+    options:
+      test: 1
+  - name: mgw_svc_stt_whisper_live
+    options:
+      test: 1
+
+  # - name: mgw_svc_video_samples
+  #   options:
+  #     test: 1
+  #     toto: "tata"
+  - name: mgw_svc_vcaa
+    options:
+      test: 1
+      toto: "tata"

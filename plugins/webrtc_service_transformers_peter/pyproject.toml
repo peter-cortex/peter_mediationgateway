@@ -1,0 +1,28 @@
+[tool.poetry]
+name = "webrtc-service-transformers-peter"
+version = "0.1.0"
+description = "Plugin PETER per il servizio WebRTC"
+authors = ["Simone Pinna <simone.pinna2@unica.it>"]
+
+packages = [
+  { include = "mgw_svc_peter", from = "src" }
+]
+
+[tool.poetry.dependencies]
+python = ">=3.10,<3.13"
+
+# path‑dependencies ai tuoi altri plugin
+webrtc-service-transformers-core        = { path = "../webrtc_service_transformers_core" }
+#webrtc-service-transformers-stt-whisper = { path = "../webrtc_service_transformers_stt_whisper" }
+#webrtc-service-transformers-stt-whisper-live = { path = "../webrtc_service_transformers_stt_whisper_live" }
+
+# Usare un index secondario per CUDA‑built wheels
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+default = false
+
+
+[build-system]
+requires = ["poetry-core>=1.0"]
+build-backend = "poetry.core.masonry.api"

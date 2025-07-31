@@ -1,0 +1,30 @@
+
+server:
+  type: dict
+  schema:
+    iceserver:
+      type: dict
+      schema:
+        url:
+          type: list
+          schema:
+            - type: str
+        username:
+          type: str
+        credential:
+          type: str
+  required: false
+          
+transformers:
+  type: list
+  schema:
+    - type: dict
+      schema:
+        name:
+          type: str
+        options:
+          type: dict
+          schema:
+            '*': object
+        required: false
+  required: false

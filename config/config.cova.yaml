@@ -1,0 +1,4 @@
+transformers:
+  - name: mgw_svc_cova
+    options:
+      test: 1
