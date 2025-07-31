@@ -17,7 +17,7 @@ Uncheck datachannel
 Check "Use STUN server"
 Click "Start"
 
-## Paramenters:
+## Parameters:
 - -p : port to use
 - SRC_LANG : language of incoming audio
 - TRG_LANG : language to translate into
