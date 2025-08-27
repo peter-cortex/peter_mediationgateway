@@ -40,9 +40,15 @@ For Windows with the pipeline running in local:
 ```
 sudo docker run --gpus all -p 8443:8443 -e VERBOSE="--verbose" -e SRC_LANG="en" -e TRG_LANG="it" -e MAX_CHUNK_DURATION=5.0 -e URGENCY_FROM="both" -e ICESERVER_URLS="stun:stun.l.google.com:19302" -e ICESERVER_USERNAME="" -e ICESERVER_CREDENTIAL="" -v "$PWD\certs\server.crt:/app/certs/cert.pem" -v "$PWD\certs\server.key:/app/certs/key.pem" -v "$PWD\config\config.peter.yaml:/app/config/config.yaml" --entrypoint python3 peter_mgw /app/mediation_gateway_service/src/webrtc_service/server.py --port 8443 --cert-file /app/certs/cert.pem --key-file /app/certs/key.pem --config /app/config/config.yaml --verbose
 ```
-- Go to https://localhost:8443/
-- Uncheck datachannel 
-- Check "Use STUN server" (optional)
+When the terminal display these two messages:  
+DEBUG:asyncio:Using selector: EpollSelector  
+DEBUG:asyncio:Using selector: EpollSelector  
+The system is ready to establish a connection, so:  
+- Go to https://localhost:8443/  
+- Uncheck datachannel   
+- Check "Use STUN server"
+- Verify that "use audio" have default codecs and stst with PETER  
 - Click "Start"
+- Wait until the message "INFO:pc:server offer_handler Offer requested" on terminal 
 
 If the GPU is not avaible remove --gpus all
