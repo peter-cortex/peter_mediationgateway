@@ -20,7 +20,8 @@ The system is ready to establish a connection, so:
 - Check "Use STUN server"
 - Verify that "use audio" have default codecs and stst with PETER  
 - Click "Start"
-- Wait until the message "INFO:pc:server offer_handler Offer requested" on terminal 
+- Wait until the message "INFO:pc:server offer_handler Offer requested" on terminal
+- Start speaks
 
 ## Parameters:
 - -p : port to use
@@ -49,6 +50,7 @@ The system is ready to establish a connection, so:
 - Check "Use STUN server"
 - Verify that "use audio" have default codecs and stst with PETER  
 - Click "Start"
-- Wait until the message "INFO:pc:server offer_handler Offer requested" on terminal 
+- Wait until the message "INFO:pc:server offer_handler Offer requested" on terminal
+- Start speaks
 
 If the GPU is not avaible remove --gpus all
