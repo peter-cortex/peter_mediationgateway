@@ -25,8 +25,8 @@ The system is ready to establish a connection, so:
 
 ## Parameters:
 - -p : port to use
-- SRC_LANG : language of incoming audio
-- TRG_LANG : language to translate into
+- SRC_LANG : language of incoming audio [en, fr, de, it]
+- TRG_LANG : language to translate into [en, fr, de, it]
 - MAX_CHUNK_DURATION : maximum duration in seconds of a chunk
 - URGENCY_FROM : [both, text, audio] source to consider for the urgency classification
 - ICESERVER_URLS : urls of the stun/turn server
