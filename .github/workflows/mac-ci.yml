@@ -1,4 +1,5 @@
 name: macOS smoke tests
+
 on:
   workflow_dispatch:
   push:
@@ -8,6 +9,7 @@ on:
 jobs:
   mac:
     strategy:
+      fail-fast: false
       matrix:
         os: [macos-13, macos-14]   # 13 = Intel, 14 = Apple Silicon
         py: ["3.11"]
@@ -18,10 +20,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Homebrew deps (espeak-ng, libsndfile)
+      - name: Install Homebrew deps (espeak-ng, libsndfile, ffmpeg)
+        shell: bash
         run: |
           export HOMEBREW_NO_AUTO_UPDATE=1
-          brew install espeak-ng libsndfile || true
+          brew install espeak-ng libsndfile ffmpeg || true
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -31,10 +34,19 @@ jobs:
       - name: Upgrade pip toolchain
         run: python -m pip install -U pip setuptools wheel packaging build
 
-      - name: Install deps (mac-safe)
+      # Torch su mac è CPU/MPS: nessun extra-index CUDA
+      - name: Install Torch (CPU/MPS) first
         run: |
-          pip install torch torchvision torchaudio        # su mac: CPU/MPS, niente CUDA
-          pip install -r requirements.peter.txt
+          pip install --upgrade --only-binary=:all: torch torchvision torchaudio
+
+      - name: Install project deps with mac constraints
+        shell: bash
+        run: |
+          if [ -f requirements.peter.txt ]; then
+            pip install -r requirements.peter.txt -c constraints/constraints-mac-311.txt
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt -c constraints/constraints-mac-311.txt
+          fi
 
       - name: Smoke test
         run: python ci/smoke_test_mac.py
