@@ -1,0 +1,40 @@
+name: macOS smoke tests
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  mac:
+    strategy:
+      matrix:
+        os: [macos-13, macos-14]   # 13 = Intel, 14 = Apple Silicon
+        py: ["3.11"]
+    runs-on: ${{ matrix.os }}
+    env:
+      PIP_PREFER_BINARY: "1"
+      HF_HUB_DISABLE_TELEMETRY: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Homebrew deps (espeak-ng, libsndfile)
+        run: |
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          brew install espeak-ng libsndfile || true
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.py }}
+
+      - name: Upgrade pip toolchain
+        run: python -m pip install -U pip setuptools wheel packaging build
+
+      - name: Install deps (mac-safe)
+        run: |
+          pip install torch torchvision torchaudio        # su mac: CPU/MPS, niente CUDA
+          pip install -r requirements.peter.txt
+
+      - name: Smoke test
+        run: python ci/smoke_test_mac.py
