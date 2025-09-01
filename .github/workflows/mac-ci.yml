@@ -48,6 +48,10 @@ jobs:
           elif [ -f requirements.txt ]; then
             pip install -r requirements.txt -c constraints/constraints-mac-311.txt
           fi
+      - name: Ensure praat-parselmouth (binary wheel)
+        run: |
+          pip install --only-binary=:all: "praat-parselmouth==0.4.3" \
+          || pip install "praat-parselmouth"
 
       - name: Smoke test
         run: python ci/smoke_test_mac.py
