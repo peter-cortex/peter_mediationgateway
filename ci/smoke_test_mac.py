@@ -8,7 +8,7 @@ y = (x @ x).sum().item()
 print(f"[torch] sample={y:.4f}")
 
 ok = True
-for name in ("thinc", "sudachipy", "praat_parselmouth", "TTS"):
+for name in ("thinc", "sudachipy", "parselmouth", "TTS"):
     try:
         __import__(name.replace("-", "_"))
         print(f"[{name}] import OK")
