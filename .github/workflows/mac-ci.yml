@@ -11,12 +11,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-13, macos-14]   # 13 = Intel, 14 = Apple Silicon
+        os:  [macos-14]   # 13 = Intel, 14 = Apple Silicon
         py: ["3.11"]
     runs-on: ${{ matrix.os }}
     env:
       PIP_PREFER_BINARY: "1"
       HF_HUB_DISABLE_TELEMETRY: "1"
+      PYTORCH_MPS_HIGH_WATERMARK_RATIO: "0.0"
     steps:
       - uses: actions/checkout@v4
 
