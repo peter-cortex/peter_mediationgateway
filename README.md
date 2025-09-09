@@ -21,8 +21,8 @@ The system is ready to establish a connection, so:
 - Verify that "use audio" have default codecs and stst with PETER  
 - Click "Start"
 - Wait until the message "INFO:pc:server offer_handler Offer requested" on terminal
-- Start speaks
-
+- Start speaks  
+NOTE: In this example, a TURN server is used, specifically coturn. If the pipeline works locally, simply remove the values of the parameters involved, as shown in the command for Windows.           
 ## Parameters:
 - -p : port to use
 - SRC_LANG : language of incoming audio [en, fr, de, it]
