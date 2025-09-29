@@ -130,6 +130,9 @@ class AudioPETERTTSTrack(MediaStreamTrack):
         self.tts_model = get_tts_model(device)
         if self.tts_model is None:
             raise RuntimeError("TTS model not preloaded! Call load_tts_model() at init.")
+
+        
+        
         self.lock = threading.Lock()
         self.task_queue = deque()  # Queue for TTS tasks
         self.frame_list = []
@@ -298,40 +301,35 @@ class AudioPETERTTSTrack(MediaStreamTrack):
         logger.warning("[PETER-TTS] Entered in fetch_tts_audio with Coqui")
         logger.warning(f"The language is: {language}")
 
+        
+
         if text.startswith("[URGENT]"):
-            urgency = "URGENT"
+            urgency_id = "URGENT"
             clean_text = text[len("[URGENT]"):].strip()
         elif text.startswith("[NOT URGENT]"):
-            urgency = "NOT URGENT"
+            urgency_id = "NOT_URGENT"
             clean_text = text[len("[NOT URGENT]"):].strip()
         else:
-            urgency = "NOT URGENT"
+            urgency_id = "NOT_URGENT"
             clean_text = text
 
         clean_text = clean_text.replace('.', ',')
 
-        logger.info(f"[PETER-TTS] Riconosciuta urgenza: {urgency}, testo pulito: {clean_text}")
+        logger.info(f"[PETER-TTS] Riconosciuta urgenza: {urgency_id}, testo pulito: {clean_text}")
 
         try:
             output_path = f"/tmp/coqui_tts_{int(time.time() * 1000)}.wav"
 
-            if urgency == "URGENT":
+            if urgency_id == "URGENT":
                 multi_speaker = ["/app/speakers/my_urgent_audio_1.wav", "/app/speakers/my_urgent_audio_2.wav"]
             else:
                 multi_speaker = ["/app/speakers/my_not_urgent_audio_1.wav", "/app/speakers/my_not_urgent_audio_2.wav"]
 
+            
             buffer = BytesIO()
             self.tts_model.tts_to_file(text=clean_text, file_path=buffer, speaker_wav=multi_speaker, language=hard_code_language)
-            #gpt_cond_latent, speaker_embedding = self.tts_model.get_conditioning_latents(audio_path=multi_speaker)
-            #output = self.tts_model.inference(
-             #clean_text,
-             #language,
-             #gpt_cond_latent,
-             #speaker_embedding,
-             #temperature=0.7,
-            #)
-            #wav = torch.tensor(output["wav"]).unsqueeze(0)
-            #torchaudio.save(output_path, wav, 24000)
+            
+            
             with open(output_path, "wb") as f_out:
                 f_out.write(buffer.getvalue())
 
@@ -358,8 +356,8 @@ class AudioPETERTTSTrack(MediaStreamTrack):
                     logger.info(f"[DEBUG] EOF raggiunto dopo {chunk_count} iterazioni, "
                           f"puntatore a frame {wf.tell()}/{total_frames}")
                     break 
-                logger.info(f"[DEBUG] Iter {chunk_count}: letti {len(chunk)} byte, "
-                      f"pointer frame = {wf.tell()}")
+                #logger.info(f"[DEBUG] Iter {chunk_count}: letti {len(chunk)} byte, "
+                #      f"pointer frame = {wf.tell()}")
                 pcm_array = np.frombuffer(chunk, dtype=np.int16)
                 pcm_array = pcm_array.reshape(1, pcm_array.size)
 
@@ -370,18 +368,6 @@ class AudioPETERTTSTrack(MediaStreamTrack):
                 frame_data = resampled_frame[0].to_ndarray()
                 #audio_buffer = np.concatenate((audio_buffer, frame_data), axis=1)
                 audio_chunks.append(frame_data)
-                #while audio_buffer.size >= target_samples:
-                #    output_frame_data = audio_buffer[:, :target_samples]
-                #    audio_buffer = audio_buffer[:, target_samples:]
-
-                #    output_frame = av.AudioFrame.from_ndarray(
-                #        output_frame_data,
-                #        layout=resampled_frame[0].layout.name,
-                #    )
-                #    output_frame.sample_rate = resampled_frame[0].sample_rate
-
-                #    with self.lock:
-                #        self.frame_list.append(output_frame)
                 while sum(chunk.shape[1] for chunk in audio_chunks) >= target_samples:
                   merged = np.concatenate(audio_chunks, axis=1)
                   output_frame_data = merged[:, :target_samples]

@@ -60,6 +60,7 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
     """
 
     MAX_CHUNK_DURATION = float(os.environ.get("MAX_CHUNK_DURATION", "5.0"))  # max seconds for chunk
+    OVERLAP_MS = int(float(os.environ.get("OVERLAP_MS", "300")))  # overlap between chunk in ms
 
     def __init__(
             self, track, channel, transform, event_emitter,
@@ -76,6 +77,8 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
         self.src_lang = src_lang
         self.trg_lang = trg_lang
         self.MAX_SILENCE_DURATION = 2.0
+
+        self.tail = pydub.AudioSegment.silent(duration=0)
         
         logger.info("Whisper temporaly folder: " + temp_dir)
 
@@ -147,9 +150,16 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                             and self.sound_chunk.max_dBFS > -20.0): #first was 30
                         await self._flush_chunk()
                     self.sound_chunk = pydub.AudioSegment.empty()
+
+                    if self.tail is None:
+                        self.tail = pydub.AudioSegment.silent(duration=0)
+
                 return audio_frame
 
 
+             #self.sound_chunk += sound
+            if len(self.sound_chunk) == 0 and len(self.tail) > 0:
+                self.sound_chunk += self.tail
             self.sound_chunk += sound
 
             #forced flush at MAX_CHUNK_DURATION (5s)
@@ -159,6 +169,7 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                 else:
                     logger.debug("Silent chunk at 5s, skip _flush_chunk()")
                     self.sound_chunk = pydub.AudioSegment.empty()
+                    self.tail = pydub.AudioSegment.silent(duration=0)
                 self.silent_count = 0
                 return audio_frame
 
@@ -173,31 +184,98 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
             return audio_frame
 
     async def _flush_chunk(self):
-
         try:
             chunk_id = str(uuid.uuid4())
-            self.sound_chunk.export(save_path, format="wav")
+
+            if self.sound_chunk and len(self.sound_chunk) > 0:
+                overlap = min(self.OVERLAP_MS, int(self.sound_chunk.duration_seconds * 1000))
+                self.tail = self.sound_chunk[-overlap:] if overlap > 0 else pydub.AudioSegment.silent(duration=0)
+            else:
+                self.tail = pydub.AudioSegment.silent(duration=0)
+
+            await asyncio.to_thread(self.sound_chunk.export, save_path, "wav")
             logger.info(f"Start pipeline for chunk {chunk_id}")
-            await self.transcription_input.put({"chunk_id": chunk_id, "path": save_path})
-            await self.audio_urgency_input.put({"chunk_id": chunk_id, "path": save_path})
-            tagged = await self.translated_queue.get() #tagged is the translation + [urgent classification]
-            if not tagged:
-              logger.info(f"[FlushChunk] Skipped sending because tagged is None (no speech detected).")
-              return
-            if tagged and self.channel:
-                msg = {
-                    "sid": self.channel.sid,
-                    "type": "transcript",
-                    "data": tagged,
-                    "language": self.language_mode,
+
+            # Inoltra ai worker
+            await asyncio.wait_for(self.transcription_input.put({"chunk_id": chunk_id, "path": save_path}), timeout=1.0)
+            await asyncio.wait_for(self.audio_urgency_input.put({"chunk_id": chunk_id, "path": save_path}), timeout=1.0)
+
+            # Risultato dal translate worker (dict atteso)
+            result = await asyncio.wait_for(self.translated_queue.get(), timeout=30.0)
+            if not result:
+                logger.info("[FlushChunk] Skipped (no result).")
+                return
+
+            # --- Estrai campi ---
+            if isinstance(result, dict):
+                # stringa taggata da usare per UI e TTS
+                tagged_str = result.get("tagged") or result.get("text") or result.get("translation") or ""
+                meta = {
+                    "chunk_id":     result.get("chunk_id"),
+                    "transcription": result.get("transcription"),
+                    "translation":   result.get("translation"),
+                    "urgency":       result.get("urgency"),
+                    "emotion":       result.get("emotion"),
                 }
-                logger.info(f"[PETER] Sent message over DataChannel: {json.dumps(msg, ensure_ascii=False)}")
-                await self.channel.send(json.dumps(msg, ensure_ascii=False))
+            else:
+                tagged_str = str(result)
+                meta = None
+
+            # --- Messaggio per il client ---
+            msg = {
+                "sid": getattr(self.channel, "sid", None),
+                "type": "transcript",          # contratto invariato
+                "data": tagged_str,            # *** STRINGA TAGGATA (serve al TTS) ***
+                "language": self.language_mode,
+            }
+            if meta:
+                msg["meta"] = meta            # campi strutturati per la UI
+
+            # --- Invio: websocket-target (OFF) vs DataChannel (ON) ---
+            send_fn = getattr(self.channel, "send", None)
+
+            if asyncio.iscoroutinefunction(send_fn):
+                # Checkbox OFF: canale "websocket" del target -> il target farà tts_request
+                await send_fn(json.dumps(msg, ensure_ascii=False))
+                logger.info(f"[PETER] Sent to target websocket channel: {msg}")
+            else:
+                # Checkbox ON: vero RTCDataChannel -> invia alla UI
+                if self.channel and getattr(self.channel, "readyState", "") == "open":
+                    try:
+                        # backpressure semplice per non saturare il DC
+                        while getattr(self.channel, "bufferedAmount", 0) > 1_000_000:
+                            await asyncio.sleep(0.01)
+                        self.channel.send(json.dumps(msg, ensure_ascii=False))
+                        logger.info(f"[PETER] DC->UI: {msg}")
+                    except Exception as e:
+                        logger.error(f"[PETER-DC] send failed: {e}")
+                else:
+                    logger.warning("[PETER-DC] channel not open, dropping message")
+
+                # In parallelo avvisa il TTS (perché col DC il target non riceve)
+                try:
+                    if hasattr(self, "ee") and self.ee:
+                        tts_msg = {
+                            "sid": getattr(self.channel, "sid", None),
+                            "voice": (self.params or {}).get("voice", "af"),
+                            "text": tagged_str,  # *** TAGGED! ***
+                            "language": getattr(self, "trg_lang", (self.params or {}).get("language", "it")),
+                            "action": "start",
+                            # extra opzionali (log/telemetria)
+                            "transcription": meta.get("transcription") if meta else None,
+                            "urgency": meta.get("urgency") if meta else None,
+                            "emotion": meta.get("emotion") if meta else None,
+                            "chunk_id": meta.get("chunk_id") if meta else chunk_id,
+                        }
+                        self.ee.emit("tts_request", tts_msg)
+                        logger.info(f"[PETER] Emitted tts_request: {tts_msg}")
+                except Exception as e:
+                    logger.warning(f"[PETER-EE] emit tts_request failed: {e}")
+
         except Exception as e:
             logger.error(f"[PETER-TTS] Error in _flush_chunk: {e}")
         finally:
             self.sound_chunk = pydub.AudioSegment.empty()
-
 
     async def _transcribe_worker(self):
         while True:
@@ -205,9 +283,14 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                 item = await self.transcription_input.get()
                 chunk_id, audio_path = item["chunk_id"], item["path"]
                 start_time = time.time()
-                audio_chunk_np = whisperx.load_audio(audio_path)
-                result = self.whisper_model.transcribe(audio_chunk_np, batch_size=16, language=self.src_lang)
-
+                audio_chunk_np = await asyncio.to_thread(whisperx.load_audio, audio_path)
+                result = await asyncio.to_thread(
+                    lambda: self.whisper_model.transcribe(
+                        audio_chunk_np,
+                        batch_size=16,
+                        language=self.src_lang
+                    )
+                )
                 if not result["segments"]:
                     logger.warning("[WhisperX] No segments found.")
                     await self.transcription_queue.put({"chunk_id": chunk_id, "text": None})
@@ -249,15 +332,24 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                   task.cancel()
 
                 current = partials[chunk_id]
-                if current.get("text") is None:
-                  logger.warning(f"[TranslateWorker] Skipping chunk_id={chunk_id} because transcription is None")
-                  await self.translated_queue.put(None)
-                  del partials[chunk_id]
-                  continue
-                transcription_ready = "text" in current
-                emotion_ready = ("emotion" in current) or (self.urgency_from == "audio")
-                urgency_ready = ("urgency" in current) or (self.urgency_from == "text")
 
+                # 1) La trascrizione è ARRIVATA ma è None -> scarta davvero
+                if ("text" in current) and (current["text"] is None):
+                    logger.warning(f"[TranslateWorker] Skipping chunk_id={chunk_id} because transcription returned None")
+                    await self.translated_queue.put(None)
+                    del partials[chunk_id]
+                    continue
+
+                # 2) Stato di prontezza: chiavi presenti (non importa l'ordine di arrivo)
+                transcription_ready = ("text" in current)           # chiave presente
+                emotion_ready       = ("emotion" in current) or (self.urgency_from == "audio")
+                urgency_ready       = ("urgency" in current) or (self.urgency_from == "text")
+
+                # 3) Se non ho TUTTO, aspetto altri item (NON scarto!)
+                if not (transcription_ready and emotion_ready and urgency_ready):
+                    continue
+
+                    
                 if not (transcription_ready and emotion_ready and urgency_ready):
                     logger.debug(
                         f"[TranslateWorker] Skipping chunk_id={chunk_id} "
@@ -269,6 +361,7 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                 logger.debug(f"[TranslateWorker] Processing chunk_id: {chunk_id}")
                 start_translation = time.time()
                 # Translation
+                transcription_for_out = current["text"].strip()
                 src_text = re.sub(r'[,.!]', '', current["text"].strip())
                 inputs = self.translation_tokenizer(src_text, return_tensors="pt", padding=True).to(self.device)
                 translated = self.translation_model.generate(**inputs)
@@ -298,7 +391,7 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                 urgency_tag = "[URGENT]" if final_urgency == "URGENT" else "[NOT URGENT]"
                 tagged_text = f"{urgency_tag} {translated_text}"
 
-                await self.translated_queue.put({"chunk_id": chunk_id, "text": tagged_text})
+                await self.translated_queue.put({"chunk_id": chunk_id, "text": tagged_text, "transcription": transcription_for_out })
                 translation_time = time.time() - start_translation
                 logger.info(f"[Time] chunk_id={chunk_id} | Translation_time={translation_time:.3f}")
                 logger.info(f"[Translation] chunk_id={chunk_id} | Translation={translated_text}")
@@ -361,7 +454,7 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
 
     async def _classify_urgency(self, audio_path: str, chunk_id: str) -> str:
         start = time.time()
-        features = extract_urgency_features(audio_path)
+        features = await asyncio.to_thread(extract_urgency_features, audio_path)
         f0_mean_threshold = 210
         f0_std_threshold = 40
         pitch_range_threshold = 50

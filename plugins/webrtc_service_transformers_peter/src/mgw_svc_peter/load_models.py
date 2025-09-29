@@ -24,12 +24,13 @@ def load_whisper_model(language="en", device="cuda"):
         #_model_cache[key] = (model, metadata)
         compute_type = "float32"
         whisper_model = whisperx.load_model(
-        "turbo",
+        "large-v3-turbo",
         device=device,
         compute_type=compute_type,
         asr_options={
             "max_new_tokens": 500,
             "clip_timestamps": True,
+            "condition_on_previous_text": True,
             "hallucination_silence_threshold": 0.5,
          },
         )

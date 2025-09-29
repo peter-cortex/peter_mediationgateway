@@ -1,15 +1,104 @@
-// get DOM elements
+//get DOM elements
 var dataChannelLog = document.getElementById('data-channel'),
     iceConnectionLog = document.getElementById('ice-connection-state'),
     iceGatheringLog = document.getElementById('ice-gathering-state'),
     signalingLog = document.getElementById('signaling-state');
 
-// peer connection
+//peer connection
 var pc = null;
 var pc2 = null;
 
-// data channel
+//data channel
 var dc = null, dcInterval = null;
+
+//recording
+let rec = null;
+let recChunks = [];
+let recMime = null;
+let playbackUrl = null;
+
+
+//creation of new MediaRecord
+function startRecording(stream) {
+  try {
+    if (!window.MediaRecorder) {
+      console.warn("MediaRecorder non supportato.");
+      return;
+    }
+
+    //reset of pre existing
+    try {
+      if (rec && rec.state !== 'inactive') rec.stop();
+    } catch {}
+    rec = null;
+
+    
+    recMime =
+      MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' :
+      MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : '';
+
+    //new recorder bonded to new stream
+    rec = new MediaRecorder(stream, recMime ? { mimeType: recMime } : {});
+    recChunks = [];
+    rec.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+
+    rec.start(1000); 
+  } catch (e) {
+    console.warn("startRecording error:", e);
+  }
+}
+
+function stopRecordingToPlayer() {
+  return new Promise((resolve) => {
+    const player = document.getElementById('recording-audio');
+    if (!rec || rec.state === 'inactive') {
+      resolve(false);
+      return;
+    }
+    rec.onstop = () => {
+      try {
+        if (playbackUrl) {
+          URL.revokeObjectURL(playbackUrl);
+          playbackUrl = null;
+        }
+        const blob = new Blob(recChunks, { type: recMime || 'audio/webm' });
+        recChunks = [];
+        playbackUrl = URL.createObjectURL(blob);
+
+        player.srcObject = null;
+        player.src = playbackUrl;
+        player.currentTime = 0;
+
+      } catch (e) {
+        console.warn("stopRecordingToPlayer error:", e);
+      } finally {
+        //reset record for new start
+        rec = null;
+        resolve(true);
+      }
+    };
+    try { rec.stop(); } catch { resolve(false); }
+  });
+}
+
+//Reset called in start
+function resetRecording() {
+  try {
+    if (rec && rec.state !== 'inactive') rec.stop();
+  } catch {}
+  rec = null;                
+  recChunks = [];
+  if (playbackUrl) {
+    URL.revokeObjectURL(playbackUrl);
+    playbackUrl = null;
+  }
+  const recEl = document.getElementById('recording-audio');
+  if (recEl) {
+    recEl.srcObject = null;
+    recEl.src = '';
+    recEl.currentTime = 0;
+  }
+}
 
 //getStunServers
 getStunServers = function () {
@@ -30,8 +119,62 @@ getStunServers = function () {
         "credentialType": ""
     }
 }
-//getStunServers - end
 
+//send text result to the page
+const _values = () => document.querySelectorAll('.output-row .value'); // [0]=Urgency, [1]=Transcription, [2]=Translation
+function updateUI({ transcription, translation, urgency }) {
+  const vals = _values();
+  if (urgency && vals[0]) {
+    vals[0].textContent = urgency;
+    vals[0].style.fontWeight = urgency === 'URGENT' ? '800' : '600';
+    vals[0].style.color = urgency === 'URGENT' ? '#dc2626' : '#6b7280';
+  }
+  if (typeof transcription === 'string' && vals[1]) {
+    vals[1].textContent = transcription;
+  }
+  if (typeof translation === 'string' && vals[2]) {
+    vals[2].textContent = translation;
+  }
+}
+
+function handleDCJSON(content) {
+  if (!content || !content.type) return;
+
+  if (content.type === 'result' && content.data) {
+    const { transcription, translation, urgency } = content.data;
+    updateUI({ transcription, translation, urgency });
+    return;
+  }
+
+  if (content.type === 'transcript') {
+    const meta = content.meta || {};
+    const raw = typeof content.data === 'string' ? content.data : String(content.data ?? '');
+
+    let urgency = meta.urgency;
+    if (!urgency) {
+      const m = raw.match(/^\s*\[(URGENT|NOT\s+URGENT)\]\s*(.*)$/i);
+      urgency = m ? m[1].toUpperCase().replace(/\s+/g, ' ') : 'UNKNOWN';
+    }
+
+    let translation = meta.translation;
+    if (!translation) {
+      const m = raw.match(/^\s*\[(?:URGENT|NOT\s+URGENT)\]\s*(.*)$/i);
+      translation = m ? m[1] : raw;
+    }
+
+    const transcription = typeof meta.transcription === 'string' ? meta.transcription : undefined;
+
+    updateUI({ transcription, translation, urgency });
+    return;
+  }
+
+}
+
+//for set up the ready text 
+function setTopBanner(text) {
+  const bar = document.querySelector('.bar'); 
+  if (bar) bar.textContent = text;
+}
 
 startWebsocket = function () {
     let protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
@@ -101,15 +244,24 @@ startWebsocket = function () {
                     channel = evt.channel;
 
                     channel.onmessage = (message) => {
-
-                        content = JSON.parse(message.data);
-                        if (content && content.type === "data") {
-                            data = content.data
+                       try {
+                        const content = JSON.parse(message.data);
+                        handleDCJSON(content);
+                      } catch {
+                        // fallback for non-JSON
+                        try {
+                          const content = JSON.parse(message.data); 
+                          if (content && content.type === "data") {
+                            const data = content.data;
                             console.log(Date());
                             if (data.location_data) {
-                                drawPoints(data.location_data, ctx, canvas);
+                              drawPoints(data.location_data, ctx, canvas);
                             }
+                          }
+                        } catch {
+                          console.log("Non-JSON DataChannel msg:", message.data);
                         }
+                      }
                     };
 
                     channel.onopen = (message) => {
@@ -123,13 +275,13 @@ startWebsocket = function () {
                 };
                 break;
             case 'data':
-            case 'keypoints':
+            /*case 'keypoints':
                 var canvas = document.getElementById("outputCanvas");
                 var canvasWidth = canvas.width;
                 var canvasHeight = canvas.height;
                 var ctx = canvas.getContext("2d");
                 drawPoints(response.data.location_data, ctx, canvas);
-                break;
+                break;*/
             case 'capabilities':
                 var audio_transform = document.getElementById("audio-transform");
                 var video_transform = document.getElementById("video-transform");
@@ -183,8 +335,6 @@ startWebsocket = function () {
         if (event.wasClean) {
             console.info(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
         } else {
-            // e.g. server process killed or network down
-            // event.code is usually 1006 in this case
             console.error('[close] Connection died');
         }
     };
@@ -223,52 +373,63 @@ function createPeerConnection() {
 
     pc.addEventListener('iceconnectionstatechange', function () {
         iceConnectionLog.textContent += ' -> ' + pc.iceConnectionState;
+        if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+            setTopBanner('Ready to talk');
+        }
     }, false);
     iceConnectionLog.textContent = pc.iceConnectionState;
 
     pc.addEventListener('signalingstatechange', function () {
         signalingLog.textContent += ' -> ' + pc.signalingState;
+        
     }, false);
     signalingLog.textContent = pc.signalingState;
 
     // connect audio / video
     pc.addEventListener('track', function (evt) {
-        if (evt.track.kind == 'video')
-            document.getElementById('video').srcObject = evt.streams[0];
-        else
-            document.getElementById('audio').srcObject = evt.streams[0];
+      if (evt.track.kind === 'video') {
+        document.getElementById('video').srcObject = evt.streams[0];
+      } else {
+        const stream = evt.streams[0];
+        const translationEl = document.getElementById('audio');
+
+        translationEl.src = '';
+        translationEl.srcObject = stream;
+
+        if (document.getElementById('enable-recording')?.checked) {
+          startRecording(stream);
+        }
+      }
     });
-
+    
     pc.ondatachannel = (evt) => {
-        channel = evt.channel;
+      const channel = evt.channel;
 
-        var canvas = document.getElementById("outputCanvas");
-        var canvasWidth = canvas.width;
-        var canvasHeight = canvas.height;
-        var ctx = canvas.getContext("2d");
+      const canvas = document.getElementById("outputCanvas");
+      const ctx = canvas.getContext("2d");
 
-        channel.onmessage = (message) => {
-
-            content = JSON.parse(message.data);
+      channel.onmessage = (message) => {
+        try {
+          const content = JSON.parse(message.data);
+          handleDCJSON(content);
+        } catch {
+          console.log("Non-JSON message:", message.data);
+          try {
+            const content = JSON.parse(message.data);
             if (content && content.type === "data") {
-                data = content.data
-                console.log(Date());
-                if (data.location_data) {
-                    drawPoints(data.location_data, ctx, canvas);
-                }
+              const data = content.data;
+              console.log(Date());
+              if (data.location_data) {
+                drawPoints(data.location_data, ctx, canvas);
+              }
             }
-        };
+          } catch {}
+        }
+      };
 
-        channel.onopen = (message) => {
-            channel.send('sending a message');
-        };
-
-        channel.onclose = (message) => {
-        };
-
-
-    };
-
+      channel.onopen  = () => channel.send('sending a message');
+      channel.onclose = () => {};
+    }; 
     return pc;
 }
 
@@ -335,9 +496,9 @@ function negociateAnswer(pc, offer) {
         constraints[kinds[i]] = true;
     }
 
-    if (constraints.video) {
+    /*if (constraints.video) {
         document.getElementById('media').style.display = 'block';
-    }
+    }*/
 
     return navigator.mediaDevices.getUserMedia(constraints)
         .then(function (stream) {
@@ -388,6 +549,8 @@ function negociateAnswer(pc, offer) {
 }
 
 function start() {
+    resetRecording();
+
     if (socket.readyState == socket.CLOSED || socket.readyState == socket.CLOSING) {
         socket = startWebsocket();
     }
@@ -435,7 +598,7 @@ function start() {
         };
 
         // vcaa
-        let isClosed = false;
+        /*let isClosed = false;
         let kpDrivingInitial = null;
         // start capturing keypoints
         const processFrame = async (dc) => {
@@ -463,7 +626,7 @@ function start() {
 
             // Continue processing frames
             requestAnimationFrame(() => processFrame(dc));
-        };
+        };*/
         
         dc = pc.createDataChannel('vcaa', parameters);
 
@@ -517,9 +680,9 @@ function start() {
     }
 
     if (constraints.audio || constraints.video) {
-        if (constraints.video) {
+       /* if (constraints.video) {
             document.getElementById('media').style.display = 'block';
-        }
+        }*/
         navigator.mediaDevices.getUserMedia(constraints).then(function (stream) {
             stream.getTracks().forEach(function (track) {
                 pc.addTrack(track, stream);
@@ -564,6 +727,16 @@ function stop() {
     if (dc) {
         dc.close();
     }
+    if (document.getElementById('enable-recording')?.checked) {
+      stopRecordingToPlayer().then(() => {
+        // optional auto-play
+        // document.getElementById('recording-audio').play().catch(()=>{});
+      });
+    }
+
+    
+    //Update up text box
+    setTopBanner('Waiting for connection...');
 
     // close transceivers
     if (pc.getTransceivers) {
@@ -701,3 +874,6 @@ function drawPoints(data, ctx, canvas) {
     }
 }
 
+window.start = start;
+window.stop = stop;
+window.reverse_offer = reverse_offer;
