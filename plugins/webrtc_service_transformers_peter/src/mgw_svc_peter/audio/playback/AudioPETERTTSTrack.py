@@ -12,9 +12,7 @@ import threading
 
 #PETER import
 from TTS.api import TTS
-#import soundfile as sf
 import wave
-#import math
 from io import BytesIO
 
 from torch.serialization import safe_globals
@@ -23,7 +21,6 @@ from TTS.tts.configs.xtts_config import XttsConfig
 from TTS.tts.models.xtts import XttsAudioConfig, XttsArgs
 from TTS.config.shared_configs import BaseDatasetConfig
 import torch
-#import torchaudio
 
 from mgw_svc_peter.load_models import get_tts_model
 
@@ -51,25 +48,6 @@ logger = logging.getLogger("AudioPipeline")
 
 _tts_model_cache = {}
 
-"""
-def load_tts_model(device="cuda"):
-      key = f"xtts_v2_{device}"
-      if key in _tts_model_cache:
-          logger.info(f"[TTS Cache] Using cached TTS model for {key}")
-          return _tts_model_cache[key]
-
-      logger.info(f"[TTS Cache] Loading new TTS model for {key}")
-      os.environ["COQUI_TOS_AGREED"] = "1"
-      with safe_globals([XttsConfig, XttsAudioConfig, BaseDatasetConfig, XttsArgs]):
-          model = TTS(model_name="tts_models/multilingual/multi-dataset/xtts_v2").to(device)
-      _tts_model_cache[key] = model
-      return model
-"""
-
-"""
-Custom Exception Class for MediaStream Errors
-Raise MediaStreamError for exceptions in the audio stream
-"""
 
 
 class MediaStreamError(Exception):
@@ -99,19 +77,12 @@ class AudioPETERTTSTrack(MediaStreamTrack):
 
 
     def __init__(self, event_emitter):
-        """
-        Constructor for AudioPETERTTSTrack class
-
-        Args:
-        event_emitter (object): Event emitter for handling TTS requests
-        """
         super().__init__()
         self.ee = event_emitter
 
         self.session_id = None
         self.processing = False
         self.force_cancelling = False
-        #self.current_voice = None
         self.blank_frame = self._create_blank_frame(self.sample_rate, self.frame_size)
 
         self.resampler = av.AudioResampler(
@@ -150,8 +121,8 @@ class AudioPETERTTSTrack(MediaStreamTrack):
                 try:
                     os.remove(os.path.join(tts_tmp_dir, filename))
                 except Exception as e:
-                    logger.warning(f"[PETER-TTS] Impossibile rimuovere {filename}: {e}")
-        logger.info("[PETER-TTS] Pulizia iniziale completata dei file coqui_tts_*.wav in /tmp")
+                    logger.warning(f"[PETER-TTS] Impossible to delete {filename}: {e}")
+        logger.info("[PETER-TTS] Clean complete from file coqui_tts_*.wav in /tmp")
 
 
 
@@ -179,25 +150,9 @@ class AudioPETERTTSTrack(MediaStreamTrack):
         return frame
 
     async def handle_tts_request(self, data: dict):
-        """
-        Handles the TTS request event.
-
-        Args:
-        data: The TTS request data
-        data.sid ( initial conversation id )
-        data.voice ( one of the voice associated )
-        data.text Text to synthetize
-        data.action ( start | append | replace | stop )
-
-        Yields:
-        None
-        """
         logger.info(f"Entering handle_tts_request function")
 
         try:
-            """
-            Get the session ID, text, voice, and action from the data
-            """
             logger.info(f"handle_tts_request data : {data}")
             sid = data.get("sid")
             text_info = data.get("text")
@@ -213,7 +168,7 @@ class AudioPETERTTSTrack(MediaStreamTrack):
             language = data.get("language", "it")
             action = data.get("action")
             action = "start"
-            logger.info('========================================================Test')
+            #logger.info('========================================================Test')
 
             if action in {"start", "append"}:
                 # await self.start_stream(sid, text, voice, action)
@@ -259,34 +214,14 @@ class AudioPETERTTSTrack(MediaStreamTrack):
             self.frame_list.clear()
 
     async def start_stream(self, sid: str, text: str, language: str, chunk_id):
-        """
-        Initialize the text-to-speech stream.
-
-        Args:
-        sid: The session ID
-        text: The text to be synthesized
-        voice: The voice to be used
-        action: ( start | append | replace )
-
-        Yields:
-        None
-        """
-
         self.session_id = sid
-        #self.current_voice = voice
-
+      
         try:
             await self.fetch_tts_audio(text, language, chunk_id)
         except Exception as e:
             logger.error(f"Error fetching TTS audio: {e}")
 
     async def stop_stream(self):
-        """
-        Terminate the text-to-speech stream.
-
-        Yields:
-        None
-        """
         if len(self.frame_list) == 0:
             logger.info("No active stream to stop.")
             return
@@ -294,7 +229,7 @@ class AudioPETERTTSTrack(MediaStreamTrack):
         with self.lock:
             self.frame_list.clear()
 
-
+    #main functions where the tts is performed
     async def fetch_tts_audio(self, text: str, language:str, chunk_id):
         start_time = time.time()
         hard_code_language = os.environ.get("TRG_LANG", "fr")
@@ -334,7 +269,7 @@ class AudioPETERTTSTrack(MediaStreamTrack):
                 f_out.write(buffer.getvalue())
 
             buffer.seek(0)
-            logger.info(f"***************************************************[PETER-TTS] File salvato: {output_path}")
+            logger.info(f"[PETER-TTS] File saved: {output_path}")
             tts_time = time.time() - start_time
             logger.info(f"[Time] chunk_id={chunk_id} | TTS={tts_time:.3f}")
 
@@ -342,9 +277,8 @@ class AudioPETERTTSTrack(MediaStreamTrack):
             total_frames = wf.getnframes()
             sample_rate = wf.getframerate()
             channels = wf.getnchannels()
-            logger.info(f"[DEBUG] file '{output_path}' ha {total_frames} frame totali, "
-                  f"{wf.getnchannels()} canali a {wf.getframerate()} Hz")
-            #audio_buffer = np.empty((1, 0), dtype=np.int16)
+            logger.info(f"[DEBUG] file '{output_path}' has {total_frames} total frame , "
+                  f"{wf.getnchannels()} channel at {wf.getframerate()} Hz")
             audio_chunks = []
             target_samples = 960 * 2
 
@@ -353,11 +287,9 @@ class AudioPETERTTSTrack(MediaStreamTrack):
                 chunk = wf.readframes(1024) 
                 chunk_count += 1
                 if not chunk:
-                    logger.info(f"[DEBUG] EOF raggiunto dopo {chunk_count} iterazioni, "
+                    logger.info(f"[DEBUG] EOF reached after {chunk_count} iterations, "
                           f"puntatore a frame {wf.tell()}/{total_frames}")
                     break 
-                #logger.info(f"[DEBUG] Iter {chunk_count}: letti {len(chunk)} byte, "
-                #      f"pointer frame = {wf.tell()}")
                 pcm_array = np.frombuffer(chunk, dtype=np.int16)
                 pcm_array = pcm_array.reshape(1, pcm_array.size)
 
@@ -366,7 +298,6 @@ class AudioPETERTTSTrack(MediaStreamTrack):
 
                 resampled_frame = self.resampler.resample(frame)
                 frame_data = resampled_frame[0].to_ndarray()
-                #audio_buffer = np.concatenate((audio_buffer, frame_data), axis=1)
                 audio_chunks.append(frame_data)
                 while sum(chunk.shape[1] for chunk in audio_chunks) >= target_samples:
                   merged = np.concatenate(audio_chunks, axis=1)
@@ -391,7 +322,7 @@ class AudioPETERTTSTrack(MediaStreamTrack):
                 
             logger.info("New TTS streaming done.")
         except Exception as e:
-            logger.error(f"[PETER-TTS] Errore in fetch_tts_audio: {e}")
+            logger.error(f"[PETER-TTS] Error in fetch_tts_audio: {e}")
 
     def get_next_frame(self) -> Optional[av.AudioFrame]:
         with self.lock:

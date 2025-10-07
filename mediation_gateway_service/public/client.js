@@ -102,23 +102,24 @@ function resetRecording() {
 
 //getStunServers
 getStunServers = function () {
-    return {
-        "servers": [
-            "stun.l.google.com:19302",
-            "stun1.l.google.com:19302",
-            "stun2.l.google.com:19302",
-            "stun3.l.google.com:19302",
-            "stun4.l.google.com:19302",
-            "stun.ekiga.net",
-            "stun.stunprotocol.org:3478",
-            "stun.voipbuster.com",
-            "stun.voipstunt.com"
-        ],
-        "username": "",
-        "credential": "",
-        "credentialType": ""
-    }
+  return {
+    "servers": [
+      "stun:stun.l.google.com:19302",
+      "stun:stun1.l.google.com:19302",
+      "stun:stun2.l.google.com:19302",
+      "stun:stun3.l.google.com:19302",
+      "stun:stun4.l.google.com:19302",
+      "stun:stun.ekiga.net",
+      "stun:stun.stunprotocol.org:3478",
+      "stun:stun.voipbuster.com",
+      "stun:stun.voipstunt.com"
+    ],
+    "username": "",
+    "credential": "",
+    "credentialType": ""
+  }
 }
+//getStunServers - end
 
 //send text result to the page
 const _values = () => document.querySelectorAll('.output-row .value'); // [0]=Urgency, [1]=Transcription, [2]=Translation
@@ -597,37 +598,6 @@ function start() {
             }
         };
 
-        // vcaa
-        /*let isClosed = false;
-        let kpDrivingInitial = null;
-        // start capturing keypoints
-        const processFrame = async (dc) => {
-            if( isClosed) {
-                return;
-            }
-            
-            // Capture a frame from the webcam
-            let kpDriving;
-            ({ kpDriving, kpDrivingInitial } = await ConvertVideoToKeypoints(sessionManager.keypointSession, kpDrivingInitial));
-
-            // Normalize keypoints
-            const kpNormalized = await normalizeKp(sessionManager.kpSource, kpDriving, kpDrivingInitial);
-
-            let message = {
-                "type": "keypoints",
-                "keypoints": await kpNormalized.value.getData(),
-                "jacobians": await kpNormalized.jacobian.getData(),
-                "normalized": true
-            }
-
-            if( dc.readyState == "open") {
-                dc.send(JSON.stringify(message));
-            }
-
-            // Continue processing frames
-            requestAnimationFrame(() => processFrame(dc));
-        };*/
-        
         dc = pc.createDataChannel('vcaa', parameters);
 
         dc.onclose = function () {
@@ -729,16 +699,13 @@ function stop() {
     }
     if (document.getElementById('enable-recording')?.checked) {
       stopRecordingToPlayer().then(() => {
-        // optional auto-play
         // document.getElementById('recording-audio').play().catch(()=>{});
       });
     }
 
     
-    //Update up text box
     setTopBanner('Waiting for connection...');
 
-    // close transceivers
     if (pc.getTransceivers) {
         pc.getTransceivers().forEach(function (transceiver) {
             if (transceiver.stop) {
@@ -747,12 +714,10 @@ function stop() {
         });
     }
 
-    // close local audio / video
     pc.getSenders().forEach(function (sender) {
         sender.track?.stop();
     });
 
-    // close transceivers
     if (pc2?.getTransceivers) {
         pc2.getTransceivers().forEach(function (transceiver) {
             if (transceiver.stop) {
@@ -761,7 +726,6 @@ function stop() {
         });
     }
 
-    // close local audio / video
     pc2?.getSenders().forEach(function (sender) {
         sender.track?.stop();
     });
@@ -849,29 +813,6 @@ function sdpFilterCodec(kind, codec, realSdp) {
     }
 
     return sdp;
-}
-
-function escapeRegExp(string) {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
-}
-
-function drawCoordinates(ctx, x, y) {
-    var pointSize = 3; // Change according to the size of the point.
-
-    ctx.fillStyle = "#ff2626"; // Red color
-
-    ctx.beginPath(); //Start path
-    ctx.arc(x, y, pointSize, 0, Math.PI * 2, true); // Draw a point using the arc function of the canvas with a point structure.
-    ctx.fill(); // Close the path and fill.
-}
-
-function drawPoints(data, ctx, canvas) {
-    if (data) {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        data.relative_keypoints.forEach((point) => {
-            drawCoordinates(ctx, canvas.width - (canvas.width * point.x).toFixed(0), (canvas.height * point.y).toFixed(0));
-        });
-    }
 }
 
 window.start = start;

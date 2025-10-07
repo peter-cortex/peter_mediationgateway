@@ -54,11 +54,7 @@ save_path = os.path.join(temp_dir, "temp.wav")
 _model_cache = {}
 
 class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
-    #whisper_model = None
-    """
-    A audio stream track that transforms frames into transcript text.
-    """
-
+    
     MAX_CHUNK_DURATION = float(os.environ.get("MAX_CHUNK_DURATION", "5.0"))  # max seconds for chunk
     OVERLAP_MS = int(float(os.environ.get("OVERLAP_MS", "300")))  # overlap between chunk in ms
 
@@ -177,7 +173,7 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
 
         except MediaStreamError:
             raise
-            #logger.info("[PETER] MediaStream terminato.")
+            #logger.info("[PETER] MediaStream terminated")
             #return None
         except Exception as e:
             logger.error(e)
@@ -196,19 +192,17 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
             await asyncio.to_thread(self.sound_chunk.export, save_path, "wav")
             logger.info(f"Start pipeline for chunk {chunk_id}")
 
-            # Inoltra ai worker
+            # Send to worker
             await asyncio.wait_for(self.transcription_input.put({"chunk_id": chunk_id, "path": save_path}), timeout=1.0)
             await asyncio.wait_for(self.audio_urgency_input.put({"chunk_id": chunk_id, "path": save_path}), timeout=1.0)
 
-            # Risultato dal translate worker (dict atteso)
+            # Results of translate worker
             result = await asyncio.wait_for(self.translated_queue.get(), timeout=30.0)
             if not result:
                 logger.info("[FlushChunk] Skipped (no result).")
                 return
 
-            # --- Estrai campi ---
             if isinstance(result, dict):
-                # stringa taggata da usare per UI e TTS
                 tagged_str = result.get("tagged") or result.get("text") or result.get("translation") or ""
                 meta = {
                     "chunk_id":     result.get("chunk_id"),
@@ -221,28 +215,25 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                 tagged_str = str(result)
                 meta = None
 
-            # --- Messaggio per il client ---
             msg = {
                 "sid": getattr(self.channel, "sid", None),
-                "type": "transcript",          # contratto invariato
-                "data": tagged_str,            # *** STRINGA TAGGATA (serve al TTS) ***
+                "type": "transcript",          
+                "data": tagged_str,            
                 "language": self.language_mode,
             }
             if meta:
-                msg["meta"] = meta            # campi strutturati per la UI
+                msg["meta"] = meta            
 
-            # --- Invio: websocket-target (OFF) vs DataChannel (ON) ---
             send_fn = getattr(self.channel, "send", None)
 
             if asyncio.iscoroutinefunction(send_fn):
-                # Checkbox OFF: canale "websocket" del target -> il target farà tts_request
+                # Checkbox OFF:  "websocket" channel of target -> target emits tts_request
                 await send_fn(json.dumps(msg, ensure_ascii=False))
                 logger.info(f"[PETER] Sent to target websocket channel: {msg}")
             else:
-                # Checkbox ON: vero RTCDataChannel -> invia alla UI
+                # Checkbox ON: true RTCDataChannel -> send to UI
                 if self.channel and getattr(self.channel, "readyState", "") == "open":
                     try:
-                        # backpressure semplice per non saturare il DC
                         while getattr(self.channel, "bufferedAmount", 0) > 1_000_000:
                             await asyncio.sleep(0.01)
                         self.channel.send(json.dumps(msg, ensure_ascii=False))
@@ -252,16 +243,16 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
                 else:
                     logger.warning("[PETER-DC] channel not open, dropping message")
 
-                # In parallelo avvisa il TTS (perché col DC il target non riceve)
+                # In parallel warn the TTS
                 try:
                     if hasattr(self, "ee") and self.ee:
                         tts_msg = {
                             "sid": getattr(self.channel, "sid", None),
                             "voice": (self.params or {}).get("voice", "af"),
-                            "text": tagged_str,  # *** TAGGED! ***
+                            "text": tagged_str, 
                             "language": getattr(self, "trg_lang", (self.params or {}).get("language", "it")),
                             "action": "start",
-                            # extra opzionali (log/telemetria)
+                            # log
                             "transcription": meta.get("transcription") if meta else None,
                             "urgency": meta.get("urgency") if meta else None,
                             "emotion": meta.get("emotion") if meta else None,
@@ -333,19 +324,16 @@ class AudioPETERtoDataTransformChannel(AudioDataTransformChannel):
 
                 current = partials[chunk_id]
 
-                # 1) La trascrizione è ARRIVATA ma è None -> scarta davvero
                 if ("text" in current) and (current["text"] is None):
                     logger.warning(f"[TranslateWorker] Skipping chunk_id={chunk_id} because transcription returned None")
                     await self.translated_queue.put(None)
                     del partials[chunk_id]
                     continue
 
-                # 2) Stato di prontezza: chiavi presenti (non importa l'ordine di arrivo)
                 transcription_ready = ("text" in current)           # chiave presente
                 emotion_ready       = ("emotion" in current) or (self.urgency_from == "audio")
                 urgency_ready       = ("urgency" in current) or (self.urgency_from == "text")
 
-                # 3) Se non ho TUTTO, aspetto altri item (NON scarto!)
                 if not (transcription_ready and emotion_ready and urgency_ready):
                     continue
 
@@ -491,7 +479,6 @@ def load_models(src_lang="en", trg_lang="it", device="cuda", compute_type="float
 
     key = f"{src_lang}_{trg_lang}_{device}"
     
-    # Se i modelli sono già stati caricati, restituiscili subito
     if key in _model_cache:
         logger.info(f"[ModelCache] Using cached models for {key}")
         return _model_cache[key]
@@ -514,12 +501,12 @@ def load_models(src_lang="en", trg_lang="it", device="cuda", compute_type="float
     whisper_model = get_whisper_model(src_lang, device=device)
 
     # Warm-up
-    try:
-        fake_audio = np.zeros(16000, dtype=np.float32)
-        whisper_model.transcribe(fake_audio, batch_size=1, language=src_lang)
-        logger.info("WhisperX warm-up complete.")
-    except Exception as e:
-        logger.warning(f"WhisperX warm-up failed: {e}")
+    #try:
+    #    fake_audio = np.zeros(16000, dtype=np.float32)
+    #    whisper_model.transcribe(fake_audio, batch_size=1, language=src_lang)
+    #    logger.info("WhisperX warm-up complete.")
+    #except Exception as e:
+    #    logger.warning(f"WhisperX warm-up failed: {e}")
 
     # Load MarianMT translation model
     logger.info("Loading MarianMT model...")
@@ -545,27 +532,6 @@ def load_models(src_lang="en", trg_lang="it", device="cuda", compute_type="float
         emotion_tokenizer = None
         emotion_model = None
 
-    """
-    emotion_classifier = None
-    emotion_tokenizer = None
-    emotion_model = None
-
-    logger.info(f"Loading emotion classifier for language: {src_lang}")
-    if src_lang == "en":
-        emotion_classifier = pipeline("sentiment-analysis", model="michellejieli/emotion_text_classifier", device=device)
-    else:
-        if src_lang == "it":
-            model_name = "aiknowyou/it-emotion-analyzer"
-        elif src_lang == "fr":
-            model_name = "astrosbd/french_emotion_camembert"
-        elif src_lang == "de":
-            model_name = "visegradmedia-emotion/Emotion_RoBERTa_german6_v7"
-        else:
-            raise ValueError(f"No emotion model defined for language '{src_lang}'")
-
-        emotion_tokenizer = AutoTokenizer.from_pretrained(model_name)
-        emotion_model = AutoModelForSequenceClassification.from_pretrained(model_name).to(device)
-    """
     _model_cache[key] = {
         "whisper_model": whisper_model,
         "translation_model": translation_model,
@@ -575,15 +541,7 @@ def load_models(src_lang="en", trg_lang="it", device="cuda", compute_type="float
         "emotion_model": emotion_model,
     }
     return _model_cache[key]
-    #return {
-        #"whisper_model": whisper_model,
-        #"translation_model": translation_model,
-        #"translation_tokenizer": translation_tokenizer,
-        #"emotion_classifier": emotion_classifier,
-        #"emotion_tokenizer": emotion_tokenizer,
-        #"emotion_model": emotion_model,
-    #}
-
+    
 
 def calculate_phrase_lengths(audio_file):
     y, sr = librosa.load(audio_file, sr=16000)

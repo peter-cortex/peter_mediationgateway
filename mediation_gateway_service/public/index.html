@@ -29,7 +29,6 @@
             color:var(--text);
         }
 
-        /* ---------- Page shell ---------- */
         .app{
             max-width:1400px;
             margin:0 auto;
@@ -53,7 +52,6 @@
             font-size:14px;
         }
 
-        /* ---------- Left column ---------- */
         .stack{display:flex;flex-direction:column;gap:16px}
 
         .bar{
@@ -90,17 +88,14 @@
             box-shadow:var(--shadow);
         }
 
-        /* “Conversation Recorder” look */
         #audio{ width:100%; margin-top:6px }
 
-        /* Group titles hidden visually but preserved (rich dashboard look) */
         h2{
             position:absolute !important;
             height:1px;width:1px;overflow:hidden;
             clip:rect(1px,1px,1px,1px); white-space:nowrap;
         }
 
-        /* Options as compact pills */
         .options-wrap{
             display:grid; gap:10px;
             grid-template-columns:1fr;
@@ -118,7 +113,6 @@
             padding:6px 10px;background:white;
         }
 
-        /* State rows as subtle chips */
         .state{
             display:grid;gap:8px;
         }
@@ -129,12 +123,10 @@
         }
         .state span{color:var(--muted); font-weight:600}
 
-        /* Output rows to mimic “Urgency/Transcription/Translation” */
         .output-row{ padding:14px 16px; border-top:1px solid #eef0f3 }
         .output-row b{font-weight:800}
         .output-row .value{ color:#6b7280; margin-left:6px }
 
-        /* ---------- Right column (media + logs) ---------- */
         .right{ display:flex; flex-direction:column; gap:16px }
         #media{
             display:block !important;
@@ -167,7 +159,6 @@
             background:white; border:0; border-radius:0;
         }
 
-        /* SDP section condensed in right column boxes */
         .sdp{
             display:grid; gap:16px;
         }
@@ -206,7 +197,7 @@
             <div class="output-row"><b>Translation:</b><span class="value">N/A</span></div>
         </div>
 
-        <!-- Options (kept, just styled compact) -->
+        <!-- Options -->
         <h2>Options</h2>
         <div class="card options-wrap">
             <div class="option">
@@ -285,7 +276,7 @@
           <audio id="recording-audio" controls></audio>
         </div>
 
-        <!-- State (kept) -->
+        <!-- State -->
         <h2>State</h2>
         <div class="card state">
             <p>ICE gathering state: <span id="ice-gathering-state"></span></p>
@@ -322,12 +313,10 @@
         </div>
     </div>
 
-    <!-- Hidden video kept in DOM -->
+    <!-- Hidden video -->
     <video id="webcam" autoplay playsinline width="256" height="256" style="display: none;"></video>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.21.0/dist/ort.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/convex-hull@1.0.3/index.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/10.6.4/math.min.js"></script>
 <script src="/vcaa/script.js"></script>
 <script src="client.js"></script>
