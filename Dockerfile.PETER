@@ -47,8 +47,10 @@ RUN curl -sSL https://install.python-poetry.org | python3.11 -
 
 WORKDIR /app
 
-#PETER dependencies 
+#PETER dependencies
 COPY requirements.peter.txt /app/
+
+RUN pip install --upgrade pip setuptools wheel
 
 RUN pip install --no-cache-dir --ignore-installed \
     --index-url https://pypi.org/simple \
