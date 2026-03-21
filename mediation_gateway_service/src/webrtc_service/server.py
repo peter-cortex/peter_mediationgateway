@@ -638,8 +638,6 @@ def aiohttp_server():
         ]
     )
     
-    app.router.add_static('/vcaa/', path=os.path.join(ROOT, "..", "..", "public", "vcaa"), name='vcaa', append_version=True)
-    
 
 
     runner = web.AppRunner(app)

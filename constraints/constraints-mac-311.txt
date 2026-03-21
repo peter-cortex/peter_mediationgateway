@@ -1,9 +1,0 @@
-# Pin “mac-friendly” per Py3.11 su macOS
-thinc<9,>=8.2.0
-praat-parselmouth==0.4.3
-sudachipy==0.6.7
-coqui-tts==0.26.*
-numba==0.59.*         # supporta Py3.11
-llvmlite==0.42.*      # compatibile con numba 0.59
-phonemizer>=3.3,<4
-sacremoses>=0.1.1

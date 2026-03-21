@@ -1,4 +1,0 @@
-transformers:
-  - name: mgw_svc_stst
-    options:
-      test: 1

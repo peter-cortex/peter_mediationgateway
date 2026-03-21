@@ -1,5 +1,0 @@
-transformers:
-  - name: mgw_svc_video_samples
-    options:
-      test: 1
-      toto: "tata"
