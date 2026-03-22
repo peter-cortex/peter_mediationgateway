@@ -1,6 +1,7 @@
 --index-url https://pypi.org/simple
 #--extra-index-url https://download.pytorch.org/whl/cu121
 
+numpy==1.26.4
 sentencepiece
 TTS==0.22.0
 librosa
